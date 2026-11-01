@@ -1,0 +1,29 @@
+# Grandma's Wild Delivery
+
+A funny single-player Roblox roguelike. The player pushes Grandma in a wheelchair through random rooms. Servers hold one player.
+
+## Workflow
+- Scripts live in `src/` and sync to Studio through Rojo. Don't edit synced scripts in Studio or through the Studio MCP: Rojo can overwrite those edits.
+- Use the Studio MCP to inspect the running game, and to build rooms and models. Those live in the place file, not Git.
+- Do one small task at a time. The user playtests feel and comedy; commit only when they ask.
+
+## Structure
+- `src/shared/Config.luau`: every tuning value. Don't hard-code gameplay numbers elsewhere.
+- `src/shared/Data/`: content as data (voice lines now; upgrades, hazards, and rooms later).
+- `src/server/`: world building, Grandma, and anything that decides rewards, damage, or saves.
+- `src/client/`: wheelchair input and physics (the player has network ownership), and reactions.
+
+## Rules
+- Never trust the client. Validate every remote on the server, and keep rewards and saves server-side.
+- All run randomness must come from a seeded `Random.new(seed)` so runs can be reproduced.
+- New content should mean adding data, not new systems.
+- Use `--!strict` in every script.
+
+## Build order
+1. Feel: pushing and Grandma falling out in one test room (current)
+2. Failure: Patience, crashes, and restarting a run
+3. Run structure: three seeded rooms with exits
+4. Choices: upgrade cards and about five upgrades
+5. Comedy: more Grandma lines and reactions
+6. Progress: Bingo Tickets, saved unlocks, and a boss
+7. Content: about 10 rooms, 5 hazards, and 20 upgrades
