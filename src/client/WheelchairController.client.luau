@@ -33,6 +33,17 @@ local previousSpeed = 0
 local previousPosition = chassis.Position
 local wasSeated = true
 local ejectPending = false -- sent to the server, but the attribute hasn't changed yet
+local boostUntil = 0
+local lastBoostCount = 0
+
+chassis:GetAttributeChangedSignal("BoostCount"):Connect(function()
+	local count = (chassis:GetAttribute("BoostCount") :: number?) or 0
+	if count > lastBoostCount then
+		boostUntil = os.clock() + Config.BoostDuration
+		GrandmaReactions.say(head, "Boost", true)
+	end
+	lastBoostCount = count
+end)
 
 ContextActionService:BindAction("Brake", function(_, inputState)
 	braking = inputState == Enum.UserInputState.Begin
@@ -67,11 +78,11 @@ local function moveToward(value: number, target: number, amount: number): number
 	return math.max(value - amount, target)
 end
 
-local function isGrounded(): boolean
+local function findGround(): RaycastResult?
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { chair, player.Character :: Instance }
-	return workspace:Raycast(chassis.Position, chassis.CFrame.UpVector * -GROUND_RAY_LENGTH, params) ~= nil
+	return workspace:Raycast(chassis.Position, chassis.CFrame.UpVector * -GROUND_RAY_LENGTH, params)
 end
 
 local function launchGrandma(velocity: Vector3)
@@ -110,13 +121,22 @@ RunService.Heartbeat:Connect(function(dt)
 
 	local yawRate = 0
 	local forwardSpeed = velocity:Dot(frame.LookVector)
+	local boosted = running and os.clock() < boostUntil
+	-- Only this client reads it, for the camera's speed effect.
+	chassis:SetAttribute("Boosted", boosted)
 
-	if isGrounded() then
+	local ground = findGround()
+	if ground then
 		local sideSpeed = velocity:Dot(frame.RightVector) * math.exp(-Config.SidewaysGrip * dt)
-		local upSpeed = velocity:Dot(frame.UpVector)
+		local upSpeed = math.min(velocity:Dot(frame.UpVector), Config.MaxStickUpSpeed)
 
-		if braking then
+		if braking or not running then
 			forwardSpeed = moveToward(forwardSpeed, 0, Config.BrakeDeceleration * dt)
+		elseif boosted then
+			-- A boost shoves the chair forward whether you're pushing or not.
+			if forwardSpeed < Config.BoostTopSpeed then
+				forwardSpeed = math.min(forwardSpeed + Config.BoostAcceleration * dt, Config.BoostTopSpeed)
+			end
 		elseif throttle > 0 then
 			local sprinting = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
 				or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
@@ -132,7 +152,8 @@ RunService.Heartbeat:Connect(function(dt)
 		else
 			forwardSpeed = moveToward(forwardSpeed, 0, Config.RollingDrag * dt)
 		end
-		forwardSpeed = math.clamp(forwardSpeed, -Config.MaxRollSpeed, Config.MaxRollSpeed)
+		local maxSpeed = if boosted then Config.BoostTopSpeed else Config.MaxRollSpeed
+		forwardSpeed = math.clamp(forwardSpeed, -maxSpeed, maxSpeed)
 
 		chassis.AssemblyLinearVelocity = frame.LookVector * forwardSpeed
 			+ frame.RightVector * sideSpeed
@@ -140,8 +161,9 @@ RunService.Heartbeat:Connect(function(dt)
 
 		local turnFactor = math.clamp(math.abs(forwardSpeed) / Config.TurnFullSpeed, Config.MinTurnFactor, 1)
 		yawRate = -steer * Config.TurnRate * turnFactor
-		local angular = chassis.AssemblyAngularVelocity
-		angular += frame.UpVector * (yawRate - angular:Dot(frame.UpVector))
+		-- Steering sets the turn, and the chair follows the slope instead of wobbling freely.
+		local angular = frame.UpVector * yawRate
+			+ frame.UpVector:Cross(ground.Normal) * Config.GroundAlignStrength
 
 		-- A fast turn leans the chair over and fills the tip meter.
 		local turnForce = math.abs(forwardSpeed * yawRate)
@@ -150,7 +172,7 @@ RunService.Heartbeat:Connect(function(dt)
 			local before = tipMeter
 			tipMeter += overflow / Config.TipBuildup * dt
 			local leanDirection = if yawRate * forwardSpeed > 0 then 1 else -1
-			angular += frame.LookVector * leanDirection * overflow * Config.TipRollStrength * dt
+			angular += frame.LookVector * leanDirection * overflow * Config.TipRollStrength
 			if before < 0.3 and tipMeter >= 0.3 then
 				GrandmaReactions.say(head, "Tipping")
 			end
@@ -158,6 +180,9 @@ RunService.Heartbeat:Connect(function(dt)
 			tipMeter = math.max(tipMeter - Config.TipDecay * dt, 0)
 		end
 		chassis.AssemblyAngularVelocity = angular
+	else
+		-- Level out in the air, so jumps land on the wheels.
+		chassis.AssemblyAngularVelocity = frame.UpVector:Cross(Vector3.yAxis) * Config.AirAlignStrength
 	end
 
 	if canFall then

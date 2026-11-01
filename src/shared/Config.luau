@@ -16,6 +16,11 @@ return {
 	TurnFullSpeed = 10, -- speed at which steering reaches full strength
 	SidewaysGrip = 5, -- higher means less drifting
 
+	-- Stability
+	GroundAlignStrength = 8, -- how firmly the chair follows the slope under it
+	AirAlignStrength = 2.5, -- how firmly it levels out during a jump
+	MaxStickUpSpeed = 2, -- limits bouncing away from the ground
+
 	-- Tipping on turns
 	SafeTurnForce = 34, -- speed x turn rate that's safe indefinitely
 	TipBuildup = 20, -- higher means it takes longer to tip
@@ -43,10 +48,25 @@ return {
 	VoiceSoundId = "rbxasset://sounds/oof.ogg",
 	VoiceVolume = 0.8,
 	VoiceShoutVolume = 1.2,
-	VoiceMinPitch = 1.5,
-	VoiceMaxPitch = 2.1,
-	VoiceSyllableGap = 0.09, -- seconds between sounds
+	VoiceMinPitch = 2.3,
+	VoiceMaxPitch = 3.3,
+	VoiceSyllableWobble = 0.35, -- how much pitch jumps within a word
+	VoiceSyllableGap = 0.07, -- seconds between sounds
+	VoiceWordPause = 0.1, -- extra pause between words
 	VoiceLettersPerSyllable = 3,
+
+	-- Stories she tells at random while riding
+	StoryMinGap = 20, -- seconds between stories
+	StoryMaxGap = 45,
+	StoryLineDuration = 3,
+
+	-- Boost pickups
+	BoostChance = 0.7, -- chance that each boost spot in a room is filled
+	BoostPickupRadius = 6,
+	BoostDuration = 3,
+	BoostTopSpeed = 55,
+	BoostAcceleration = 60,
+	BoostFieldOfViewKick = 15,
 
 	-- First-person camera
 	CameraOffset = Vector3.new(0, 5.2, 4), -- from the Chassis: up, and behind the handle
@@ -58,5 +78,6 @@ return {
 	LineDuration = 2.5,
 	LineCooldown = 2,
 	MaxPusherDistance = 14, -- the pusher teleports back beyond this
-	FallResetHeight = -30,
+	FallResetDepth = 40, -- how far below the current room's entrance counts as falling off
+	RoomsPerRun = 3,
 }

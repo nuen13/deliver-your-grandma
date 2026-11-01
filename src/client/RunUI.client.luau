@@ -1,5 +1,5 @@
 --!strict
--- The Patience bar, and the screen shown when Grandma gives up.
+-- The Patience bar, room progress, and the screen shown when a run ends.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -10,6 +10,7 @@ local GrandmaReactions = require(script.Parent.GrandmaReactions)
 local FULL_COLOR = Color3.fromRGB(90, 200, 110)
 local LOW_COLOR = Color3.fromRGB(225, 60, 50)
 local PANEL_COLOR = Color3.fromRGB(35, 30, 40)
+local BANNER_DURATION = 2.5
 
 local player = Players.LocalPlayer
 local restartRun = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RestartRun") :: RemoteEvent
@@ -53,6 +54,19 @@ Instance.new("UICorner").Parent = barFill
 local barLabel = addLabel(barBack, "Grandma's Patience", UDim2.fromScale(1, 0.8), UDim2.fromScale(0, 0.1))
 barLabel.ZIndex = 2
 
+-- Room progress and seed, under the bar
+local roomLabel = addLabel(gui, "", UDim2.new(0.3, 0, 0, 26), UDim2.new(0.7, -16, 0, 50))
+roomLabel.TextXAlignment = Enum.TextXAlignment.Right
+local seedLabel = addLabel(gui, "", UDim2.new(0.3, 0, 0, 16), UDim2.new(0.7, -16, 0, 78))
+seedLabel.TextXAlignment = Enum.TextXAlignment.Right
+seedLabel.TextTransparency = 0.4
+
+local bannerLabel = addLabel(gui, "", UDim2.new(0.7, 0, 0, 70), UDim2.fromScale(0.15, 0.2))
+bannerLabel.TextStrokeTransparency = 0
+bannerLabel.Visible = false
+local shownRoom = 0
+local bannerToken = 0
+
 -- Run over screen
 local failPanel = Instance.new("Frame")
 failPanel.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -63,7 +77,7 @@ failPanel.Visible = false
 failPanel.Parent = gui
 Instance.new("UICorner").Parent = failPanel
 
-addLabel(failPanel, "Grandma has had enough.", UDim2.new(1, -32, 0, 70), UDim2.fromOffset(16, 16))
+local titleLabel = addLabel(failPanel, "", UDim2.new(1, -32, 0, 70), UDim2.fromOffset(16, 16))
 local fallsLabel = addLabel(failPanel, "", UDim2.new(1, -32, 0, 36), UDim2.fromOffset(16, 96))
 
 local restartButton = Instance.new("TextButton")
@@ -91,19 +105,57 @@ local function updatePatience()
 end
 
 local function updateRunState()
-	local failed = chassis:GetAttribute("RunState") == "Failed"
+	local state = chassis:GetAttribute("RunState")
+	local ended = state == "Failed" or state == "Won"
 	local falls = (chassis:GetAttribute("Falls") :: number?) or 0
-	fallsLabel.Text = `Times you dropped her: {falls}`
-	if failed and not failPanel.Visible then
-		GrandmaReactions.say(head, "GaveUp", true)
+	if state == "Won" then
+		local seconds = (chassis:GetAttribute("FinishTime") :: number?) or 0
+		titleLabel.Text = "Grandma made it to bingo!"
+		fallsLabel.Text = `Time: {math.floor(seconds)}s   Dropped her: {falls}`
+		restartButton.Text = "Go again (R)"
+	else
+		titleLabel.Text = "Grandma has had enough."
+		fallsLabel.Text = `Times you dropped her: {falls}`
+		restartButton.Text = "Try again (R)"
 	end
-	failPanel.Visible = failed
+	if ended and not failPanel.Visible then
+		GrandmaReactions.say(head, if state == "Won" then "Arrived" else "GaveUp", true)
+	end
+	failPanel.Visible = ended
+end
+
+local function updateProgress()
+	local room = (chassis:GetAttribute("Room") :: number?) or 1
+	local roomCount = (chassis:GetAttribute("RoomCount") :: number?) or 1
+	local seed = chassis:GetAttribute("Seed")
+	local roomName = (chassis:GetAttribute("RoomName") :: string?) or ""
+	roomLabel.Text = `Room {room} of {roomCount}`
+	seedLabel.Text = `Seed {seed or "-"}`
+
+	-- A big announcement whenever the room changes.
+	if room ~= shownRoom then
+		shownRoom = room
+		bannerToken += 1
+		local token = bannerToken
+		bannerLabel.Text = `ROOM {room}: {roomName}`
+		bannerLabel.Visible = true
+		task.delay(BANNER_DURATION, function()
+			if bannerToken == token then
+				bannerLabel.Visible = false
+			end
+		end)
+	end
 end
 
 chassis:GetAttributeChangedSignal("Patience"):Connect(updatePatience)
 chassis:GetAttributeChangedSignal("RunState"):Connect(updateRunState)
 chassis:GetAttributeChangedSignal("Falls"):Connect(updateRunState)
+chassis:GetAttributeChangedSignal("Room"):Connect(updateProgress)
+chassis:GetAttributeChangedSignal("RoomCount"):Connect(updateProgress)
+chassis:GetAttributeChangedSignal("Seed"):Connect(updateProgress)
+chassis:GetAttributeChangedSignal("RoomName"):Connect(updateProgress)
 updatePatience()
 updateRunState()
+updateProgress()
 
 gui.Parent = player:WaitForChild("PlayerGui")

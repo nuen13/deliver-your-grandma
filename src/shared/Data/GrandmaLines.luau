@@ -18,6 +18,16 @@ return {
 		"Go. Bingo waits for no one.",
 		"Again, and I tell your mother.",
 	},
+	Boost = {
+		"WHEEEEEE!",
+		"FASTER, YOU COWARD!",
+		"I CAN SEE MY LATE HUSBAND!",
+	},
+	Arrived = {
+		"Finally. My numbers had better be lucky.",
+		"You may stay in the will. For now.",
+		"Same time next week. Bring a helmet.",
+	},
 	GaveUp = {
 		"THAT'S IT. I'M WALKING TO BINGO.",
 		"I'm calling your cousin.",

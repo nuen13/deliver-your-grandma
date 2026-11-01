@@ -40,7 +40,7 @@ function Wheelchair.build(name: string, cframe: CFrame): Model
 	chassis.Color = FRAME_COLOR
 	chassis.CollisionGroup = "Chair"
 	-- Heavy and slippery: it stays low, and rolls downhill by itself.
-	chassis.CustomPhysicalProperties = PhysicalProperties.new(3, 0.03, 0.1, 100, 1)
+	chassis.CustomPhysicalProperties = PhysicalProperties.new(3, 0.03, 0, 100, 100)
 	chassis.TopSurface = Enum.SurfaceType.Smooth
 	chassis.BottomSurface = Enum.SurfaceType.Smooth
 	chassis.Parent = model
@@ -67,7 +67,7 @@ function Wheelchair.build(name: string, cframe: CFrame): Model
 		roller.CanQuery = false
 		roller.CanTouch = false
 		roller.CollisionGroup = "Chair"
-		roller.CustomPhysicalProperties = PhysicalProperties.new(0.1, 0.03, 0.1, 100, 1)
+		roller.CustomPhysicalProperties = PhysicalProperties.new(0.1, 0.03, 0, 100, 100)
 		roller.Parent = model
 
 		local weld = Instance.new("WeldConstraint")

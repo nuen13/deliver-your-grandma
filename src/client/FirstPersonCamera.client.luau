@@ -15,6 +15,7 @@ local chair = workspace:WaitForChild(player.Name .. "_Chair") :: Model
 local chassis = chair:WaitForChild("Chassis") :: Part
 
 local viewDirection = chassis.CFrame.LookVector
+local fieldOfView = Config.CameraFieldOfView
 
 local function hideCharacter()
 	local character = player.Character
@@ -30,7 +31,9 @@ end
 RunService:BindToRenderStep("FirstPersonCamera", Enum.RenderPriority.Camera.Value + 1, function(dt)
 	local camera = workspace.CurrentCamera
 	camera.CameraType = Enum.CameraType.Scriptable
-	camera.FieldOfView = Config.CameraFieldOfView
+	local boostKick = if chassis:GetAttribute("Boosted") == true then Config.BoostFieldOfViewKick else 0
+	fieldOfView += (Config.CameraFieldOfView + boostKick - fieldOfView) * (1 - math.exp(-6 * dt))
+	camera.FieldOfView = fieldOfView
 
 	local frame = chassis.CFrame
 	if math.abs(frame.LookVector.Y) < MAX_CHAIR_PITCH then

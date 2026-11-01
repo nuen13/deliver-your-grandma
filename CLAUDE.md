@@ -9,7 +9,7 @@ A funny single-player Roblox roguelike. The player pushes Grandma in a wheelchai
 
 ## Structure
 - `src/shared/Config.luau`: every tuning value. Don't hard-code gameplay numbers elsewhere.
-- `src/shared/Data/`: content as data (voice lines now; upgrades, hazards, and rooms later).
+- `src/shared/Data/`: content as data (rooms and voice lines now; upgrades and hazards later).
 - `src/server/`: world building, Grandma, and anything that decides rewards, damage, or saves.
 - `src/client/`: wheelchair input and physics (the player has network ownership), and reactions.
 
@@ -21,9 +21,9 @@ A funny single-player Roblox roguelike. The player pushes Grandma in a wheelchai
 
 ## Build order
 1. Feel: pushing and Grandma falling out in one test room (done)
-2. Failure: Patience, crashes, and restarting a run (current)
-3. Run structure: three seeded rooms with exits
-4. Choices: upgrade cards and about five upgrades
+2. Failure: Patience, crashes, and restarting a run (done)
+3. Run structure: three seeded rooms with exits (done)
+4. Choices: upgrade cards and about five upgrades (current)
 5. Comedy: more Grandma lines and reactions
 6. Progress: Bingo Tickets, saved unlocks, and a boss
 7. Content: about 10 rooms, 5 hazards, and 20 upgrades
