@@ -54,6 +54,7 @@ function Grandma.seat(model: Model, chassis: Part)
 
 	for _, body in BODY do
 		local part = getPart(model, body.name)
+		part.Anchored = false
 		part.Massless = true
 		part.CanCollide = false
 		part.CFrame = chassis.CFrame * body.offset
@@ -88,6 +89,16 @@ function Grandma.eject(model: Model, launch: Vector3)
 
 		part:SetNetworkOwner(nil)
 		part.AssemblyLinearVelocity = launch
+	end
+end
+
+-- Stops her falling so far off the map that Roblox destroys her parts.
+function Grandma.freezeBelow(model: Model, height: number)
+	for _, body in BODY do
+		local part = getPart(model, body.name)
+		if part.Position.Y < height then
+			part.Anchored = true
+		end
 	end
 end
 

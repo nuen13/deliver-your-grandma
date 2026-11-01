@@ -20,8 +20,8 @@ A funny single-player Roblox roguelike. The player pushes Grandma in a wheelchai
 - Use `--!strict` in every script.
 
 ## Build order
-1. Feel: pushing and Grandma falling out in one test room (current)
-2. Failure: Patience, crashes, and restarting a run
+1. Feel: pushing and Grandma falling out in one test room (done)
+2. Failure: Patience, crashes, and restarting a run (current)
 3. Run structure: three seeded rooms with exits
 4. Choices: upgrade cards and about five upgrades
 5. Comedy: more Grandma lines and reactions

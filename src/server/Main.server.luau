@@ -1,5 +1,6 @@
 --!strict
--- Sets up the world, gives each player a wheelchair, and handles Grandma falling out and resets.
+-- Sets up the world, gives each player a wheelchair, and runs Patience, falls, and restarts.
+-- The Chassis attributes GrandmaSeated, Patience, Falls, and RunState are the run's state for the client.
 
 local PhysicsService = game:GetService("PhysicsService")
 local Players = game:GetService("Players")
@@ -16,10 +17,13 @@ type Rig = {
 	chassis: Part,
 	grandma: Model,
 	seatToken: number, -- cancels a waiting reseat when the chair is reset
-	lastReset: number,
+	lastRestart: number,
+	lastBump: number,
+	patience: number,
+	falls: number,
 }
 
-local RESET_COOLDOWN = 1
+local RESTART_COOLDOWN = 1
 
 local rigs: { [Player]: Rig } = {}
 
@@ -38,13 +42,25 @@ remotes.Name = "Remotes"
 local grandmaEjected = Instance.new("RemoteEvent")
 grandmaEjected.Name = "GrandmaEjected"
 grandmaEjected.Parent = remotes
-local resetChair = Instance.new("RemoteEvent")
-resetChair.Name = "ResetChair"
-resetChair.Parent = remotes
+local grandmaBumped = Instance.new("RemoteEvent")
+grandmaBumped.Name = "GrandmaBumped"
+grandmaBumped.Parent = remotes
+local restartRun = Instance.new("RemoteEvent")
+restartRun.Name = "RestartRun"
+restartRun.Parent = remotes
 remotes.Parent = ReplicatedStorage
+
+local function isRunning(rig: Rig): boolean
+	return rig.chassis:GetAttribute("RunState") == "Running"
+end
+
+local function isSeated(rig: Rig): boolean
+	return rig.chassis:GetAttribute("GrandmaSeated") == true
+end
 
 local function restoreChair(player: Player, rig: Rig, cframe: CFrame)
 	rig.seatToken += 1
+	rig.chassis.Anchored = false
 	rig.chassis:SetNetworkOwner(nil)
 	rig.chair:PivotTo(cframe)
 	rig.chassis.AssemblyLinearVelocity = Vector3.zero
@@ -61,10 +77,27 @@ local function placePusher(player: Player, rig: Rig)
 	end
 end
 
-local function resetToStart(player: Player, rig: Rig)
-	rig.lastReset = os.clock()
+local function returnToStart(player: Player, rig: Rig)
 	restoreChair(player, rig, TestRoom.ChairStart)
 	placePusher(player, rig)
+end
+
+local function startRun(player: Player, rig: Rig)
+	rig.lastRestart = os.clock()
+	rig.patience = Config.MaxPatience
+	rig.falls = 0
+	rig.chassis:SetAttribute("Patience", rig.patience)
+	rig.chassis:SetAttribute("Falls", rig.falls)
+	rig.chassis:SetAttribute("RunState", "Running")
+	returnToStart(player, rig)
+end
+
+local function losePatience(rig: Rig, amount: number)
+	rig.patience = math.max(rig.patience - amount, 0)
+	rig.chassis:SetAttribute("Patience", rig.patience)
+	if rig.patience == 0 then
+		rig.chassis:SetAttribute("RunState", "Failed")
+	end
 end
 
 local function uprightAt(chassis: Part): CFrame
@@ -75,6 +108,24 @@ local function uprightAt(chassis: Part): CFrame
 	end
 	local position = chassis.Position + Vector3.new(0, 3, 0)
 	return CFrame.lookAt(position, position + flatLook)
+end
+
+local function throwGrandma(player: Player, rig: Rig, launch: Vector3)
+	rig.chassis:SetAttribute("GrandmaSeated", false)
+	Grandma.eject(rig.grandma, launch)
+	rig.falls += 1
+	rig.chassis:SetAttribute("Falls", rig.falls)
+	losePatience(rig, Config.FallPatienceCost)
+
+	rig.seatToken += 1
+	local token = rig.seatToken
+	if isRunning(rig) then
+		task.delay(Config.ReseatDelay, function()
+			if rigs[player] == rig and rig.seatToken == token then
+				restoreChair(player, rig, uprightAt(rig.chassis))
+			end
+		end)
+	end
 end
 
 local function attachPusher(player: Player, rig: Rig, character: Model)
@@ -122,7 +173,7 @@ local function attachPusher(player: Player, rig: Rig, character: Model)
 	face.Responsiveness = 100
 	face.Parent = rootPart
 
-	resetToStart(player, rig)
+	startRun(player, rig)
 end
 
 local function onPlayerAdded(player: Player)
@@ -130,13 +181,19 @@ local function onPlayerAdded(player: Player)
 	local chassis = chair.PrimaryPart :: Part
 	local grandma = Grandma.build(chair, chassis)
 	chassis:SetAttribute("GrandmaSeated", true)
+	chassis:SetAttribute("Patience", Config.MaxPatience)
+	chassis:SetAttribute("Falls", 0)
+	chassis:SetAttribute("RunState", "Running")
 
 	local rig: Rig = {
 		chair = chair,
 		chassis = chassis,
 		grandma = grandma,
 		seatToken = 0,
-		lastReset = 0,
+		lastRestart = 0,
+		lastBump = 0,
+		patience = Config.MaxPatience,
+		falls = 0,
 	}
 	rigs[player] = rig
 
@@ -163,7 +220,7 @@ end)
 
 grandmaEjected.OnServerEvent:Connect(function(player, launch: unknown)
 	local rig = rigs[player]
-	if not rig or rig.chassis:GetAttribute("GrandmaSeated") ~= true then
+	if not rig or not isSeated(rig) or not isRunning(rig) then
 		return
 	end
 	if typeof(launch) ~= "Vector3" then
@@ -177,29 +234,49 @@ grandmaEjected.OnServerEvent:Connect(function(player, launch: unknown)
 		launch = launch.Unit * Config.MaxLaunchSpeed
 	end
 
-	rig.chassis:SetAttribute("GrandmaSeated", false)
-	Grandma.eject(rig.grandma, launch)
-
-	rig.seatToken += 1
-	local token = rig.seatToken
-	task.delay(Config.ReseatDelay, function()
-		if rigs[player] == rig and rig.seatToken == token then
-			restoreChair(player, rig, uprightAt(rig.chassis))
-		end
-	end)
+	throwGrandma(player, rig, launch)
 end)
 
-resetChair.OnServerEvent:Connect(function(player)
+grandmaBumped.OnServerEvent:Connect(function(player)
 	local rig = rigs[player]
-	if rig and os.clock() - rig.lastReset >= RESET_COOLDOWN then
-		resetToStart(player, rig)
+	if not rig or not isSeated(rig) or not isRunning(rig) then
+		return
+	end
+	local now = os.clock()
+	if now - rig.lastBump < Config.BumpCostCooldown then
+		return
+	end
+	rig.lastBump = now
+
+	-- The last bump she'll tolerate throws her out, so a run never ends with her still seated.
+	if rig.patience <= Config.BumpPatienceCost then
+		throwGrandma(player, rig, Vector3.yAxis * Config.LaunchUpSpeed)
+	else
+		losePatience(rig, Config.BumpPatienceCost)
+	end
+end)
+
+restartRun.OnServerEvent:Connect(function(player)
+	local rig = rigs[player]
+	if rig and os.clock() - rig.lastRestart >= RESTART_COOLDOWN then
+		startRun(player, rig)
 	end
 end)
 
 RunService.Heartbeat:Connect(function()
 	for player, rig in rigs do
-		if rig.chassis.Position.Y < Config.FallResetHeight then
-			resetToStart(player, rig)
+		Grandma.freezeBelow(rig.grandma, Config.FallResetHeight)
+
+		if rig.chassis.Position.Y < Config.FallResetHeight and not rig.chassis.Anchored then
+			-- Going off the edge with Grandma aboard counts as dropping her.
+			if isRunning(rig) and isSeated(rig) then
+				throwGrandma(player, rig, Vector3.zero)
+			end
+			if isRunning(rig) then
+				returnToStart(player, rig)
+			else
+				rig.chassis.Anchored = true
+			end
 		else
 			local character = player.Character
 			local rootPart = character and character:FindFirstChild("HumanoidRootPart") :: Part?

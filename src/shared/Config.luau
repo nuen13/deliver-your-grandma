@@ -4,6 +4,8 @@
 return {
 	-- Pushing
 	TopSpeed = 26,
+	SprintTopSpeed = 40, -- while holding Shift
+	SprintAcceleration = 30,
 	ReverseSpeed = 10,
 	MaxRollSpeed = 45, -- hills can push the chair past TopSpeed, up to this
 	Acceleration = 18,
@@ -30,6 +32,21 @@ return {
 	LaunchSpeedMultiplier = 1.1,
 	MaxLaunchSpeed = 120,
 	ReseatDelay = 4,
+
+	-- Patience: Grandma's health for the run
+	MaxPatience = 100,
+	FallPatienceCost = 25,
+	BumpPatienceCost = 5,
+	BumpCostCooldown = 1, -- bumps closer together than this cost nothing extra
+
+	-- Grandma's babbling voice: one short sound per syllable
+	VoiceSoundId = "rbxasset://sounds/oof.ogg",
+	VoiceVolume = 0.8,
+	VoiceShoutVolume = 1.2,
+	VoiceMinPitch = 1.5,
+	VoiceMaxPitch = 2.1,
+	VoiceSyllableGap = 0.09, -- seconds between sounds
+	VoiceLettersPerSyllable = 3,
 
 	-- First-person camera
 	CameraOffset = Vector3.new(0, 5.2, 4), -- from the Chassis: up, and behind the handle

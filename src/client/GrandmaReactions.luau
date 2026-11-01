@@ -1,5 +1,5 @@
 --!strict
--- Shows Grandma's lines in a speech bubble above her head.
+-- Shows Grandma's lines in a speech bubble above her head, with a babbling voice.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -11,6 +11,41 @@ local GrandmaReactions = {}
 local random = Random.new()
 local lastLineTime = -math.huge
 local currentBubble: BillboardGui? = nil
+local babbleToken = 0 -- a new line cuts off the one before it
+
+local function getVoice(head: BasePart): Sound
+	local voice = head:FindFirstChild("Voice") :: Sound?
+	if voice then
+		return voice
+	end
+	local newVoice = Instance.new("Sound")
+	newVoice.Name = "Voice"
+	newVoice.SoundId = Config.VoiceSoundId
+	newVoice.Parent = head
+	return newVoice
+end
+
+local function babble(head: BasePart, line: string)
+	babbleToken += 1
+	local token = babbleToken
+	local voice = getVoice(head)
+	voice.Volume = if line == line:upper() then Config.VoiceShoutVolume else Config.VoiceVolume
+
+	local syllables = math.max(math.ceil(#line / Config.VoiceLettersPerSyllable), 1)
+	syllables = math.min(syllables, math.floor(Config.LineDuration / Config.VoiceSyllableGap))
+
+	task.spawn(function()
+		for _ = 1, syllables do
+			if babbleToken ~= token then
+				return
+			end
+			voice.PlaybackSpeed = random:NextNumber(Config.VoiceMinPitch, Config.VoiceMaxPitch)
+			voice.TimePosition = 0
+			voice:Play()
+			task.wait(Config.VoiceSyllableGap)
+		end
+	end)
+end
 
 function GrandmaReactions.say(head: BasePart, category: string, ignoreCooldown: boolean?)
 	local now = os.clock()
@@ -47,6 +82,7 @@ function GrandmaReactions.say(head: BasePart, category: string, ignoreCooldown: 
 
 	bubble.Parent = head
 	currentBubble = bubble
+	babble(head, line)
 
 	task.delay(Config.LineDuration, function()
 		if currentBubble == bubble then

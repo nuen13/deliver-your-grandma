@@ -1,6 +1,6 @@
 --!strict
 -- Drives the wheelchair and decides when a crash, tilt, or fast turn throws Grandma out.
--- W/S push and pull, A/D steer, Space brakes, R resets to the start.
+-- W/S push and pull, A/D steer, Shift speeds up, Space brakes, R restarts the run.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -17,7 +17,8 @@ local GROUND_RAY_LENGTH = 1.5
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local grandmaEjected = remotes:WaitForChild("GrandmaEjected") :: RemoteEvent
-local resetChair = remotes:WaitForChild("ResetChair") :: RemoteEvent
+local grandmaBumped = remotes:WaitForChild("GrandmaBumped") :: RemoteEvent
+local restartRun = remotes:WaitForChild("RestartRun") :: RemoteEvent
 
 local chair = workspace:WaitForChild(player.Name .. "_Chair") :: Model
 local chassis = chair:WaitForChild("Chassis") :: Part
@@ -39,13 +40,13 @@ ContextActionService:BindAction("Brake", function(_, inputState)
 end, true, Enum.KeyCode.Space)
 ContextActionService:SetTitle("Brake", "Brake")
 
-ContextActionService:BindAction("ResetChair", function(_, inputState)
+ContextActionService:BindAction("RestartRun", function(_, inputState)
 	if inputState == Enum.UserInputState.Begin then
-		resetChair:FireServer()
+		restartRun:FireServer()
 	end
 	return Enum.ContextActionResult.Sink
 end, true, Enum.KeyCode.R)
-ContextActionService:SetTitle("ResetChair", "Reset")
+ContextActionService:SetTitle("RestartRun", "Restart")
 
 local function keyAxis(positive: { Enum.KeyCode }, negative: { Enum.KeyCode }): number
 	local function anyDown(keys: { Enum.KeyCode }): boolean
@@ -99,10 +100,11 @@ RunService.Heartbeat:Connect(function(dt)
 		previousSpeed = horizontalSpeed
 		GrandmaReactions.say(head, "Reseated", true)
 	end
-	local canFall = seated and wasSeated and not ejectPending
+	local running = chassis:GetAttribute("RunState") == "Running"
+	local canFall = running and seated and wasSeated and not ejectPending
 
-	-- Ignore keys while typing in chat or another text box.
-	local typing = UserInputService:GetFocusedTextBox() ~= nil
+	-- Ignore keys while typing in chat or another text box, and after the run ends.
+	local typing = UserInputService:GetFocusedTextBox() ~= nil or not running
 	local throttle = if typing then 0 else keyAxis({ Enum.KeyCode.W, Enum.KeyCode.Up }, { Enum.KeyCode.S, Enum.KeyCode.Down })
 	local steer = if typing then 0 else keyAxis({ Enum.KeyCode.D, Enum.KeyCode.Right }, { Enum.KeyCode.A, Enum.KeyCode.Left })
 
@@ -116,8 +118,12 @@ RunService.Heartbeat:Connect(function(dt)
 		if braking then
 			forwardSpeed = moveToward(forwardSpeed, 0, Config.BrakeDeceleration * dt)
 		elseif throttle > 0 then
-			if forwardSpeed < Config.TopSpeed then
-				forwardSpeed = math.min(forwardSpeed + Config.Acceleration * throttle * dt, Config.TopSpeed)
+			local sprinting = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+				or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+			local topSpeed = if sprinting then Config.SprintTopSpeed else Config.TopSpeed
+			local acceleration = if sprinting then Config.SprintAcceleration else Config.Acceleration
+			if forwardSpeed < topSpeed then
+				forwardSpeed = math.min(forwardSpeed + acceleration * throttle * dt, topSpeed)
 			end
 		elseif throttle < 0 then
 			if forwardSpeed > -Config.ReverseSpeed then
@@ -165,6 +171,7 @@ RunService.Heartbeat:Connect(function(dt)
 			launchGrandma(launchFrom)
 		elseif speedDrop >= Config.BumpSpeedDrop then
 			GrandmaReactions.say(head, "Bumped")
+			grandmaBumped:FireServer()
 		end
 	end
 

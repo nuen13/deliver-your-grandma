@@ -18,6 +18,11 @@ return {
 		"Go. Bingo waits for no one.",
 		"Again, and I tell your mother.",
 	},
+	GaveUp = {
+		"THAT'S IT. I'M WALKING TO BINGO.",
+		"I'm calling your cousin.",
+		"You're out of the will. All of it.",
+	},
 	Tipping = {
 		"Slow down, you maniac!",
 		"THE WHEELS ARE LEAVING THE GROUND!",
