@@ -23,7 +23,8 @@ A funny single-player Roblox roguelike. The player pushes Grandma in a wheelchai
 1. Feel: pushing and Grandma falling out in one test room (done)
 2. Failure: Patience, crashes, and restarting a run (done)
 3. Run structure: three seeded rooms with exits (done)
-4. Choices: upgrade cards and about five upgrades (current)
-5. Comedy: more Grandma lines and reactions
-6. Progress: Bingo Tickets, saved unlocks, and a boss
-7. Content: about 10 rooms, 5 hazards, and 20 upgrades
+4. Choices: upgrade cards and about five upgrades (built, awaiting playtest)
+5. Comedy: more Grandma lines and reactions (built, awaiting playtest)
+6. Progress: Bingo Tickets, saved unlocks, and a boss (built, awaiting playtest)
+7. Content: about 10 rooms, 5 hazards, and 20 upgrades (built, awaiting playtest)
+8. Release: playtest, then follow `PUBLISHING.md` (current)

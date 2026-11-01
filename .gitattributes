@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.bat text eol=crlf
+*.rbxl binary
+*.rbxm binary

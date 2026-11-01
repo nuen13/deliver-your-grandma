@@ -68,6 +68,56 @@ return {
 	BoostAcceleration = 60,
 	BoostFieldOfViewKick = 15,
 
+	-- Upgrade cards
+	UpgradeCardsOffered = 3, -- cards to pick from after each room
+
+	-- Bingo Tickets: the saved currency
+	TicketsPerRoom = 5,
+	TicketsWinBonus = 30,
+	TicketsCleanBonus = 15, -- for winning without dropping her
+	AutosaveInterval = 30,
+
+	-- Hazards
+	HazardHitCooldown = 1.5,
+	CatSpeed = 1.6, -- radians per second along its path
+	CatHitRadius = 4.5,
+	SweeperSpeed = 1.1, -- radians per second
+	SweeperHitWidth = 2.5,
+	PianoPeriod = 4, -- seconds per drop, including the warning
+	PianoWarnTime = 1.6,
+	PianoFallTime = 0.4, -- the last part of the warning
+	PianoSlamTime = 0.2, -- how long the landing can hit
+	PianoHitRadius = 6,
+	PianoDropHeight = 45,
+	OilGripFactor = 0.08, -- share of SidewaysGrip kept on oil
+	MudTopSpeed = 14,
+	MudDrag = 60,
+
+	-- Mildred, the boss
+	BossThrowInterval = 1.6,
+	BossThrowIntervalPerLetter = 0.2, -- she panics as you collect letters
+	BossBallSpeed = 55,
+	BossBallLifetime = 6,
+	BossBallHitRadius = 4.5,
+	BossBallPatienceCost = 10,
+	BossAimLead = 0.7, -- how far ahead of the chair she aims, as a share of its movement
+	BossAimSpread = 10,
+	BossLetterRadius = 7,
+
+	-- Sound effects, using sounds built into Roblox
+	Sfx = {
+		Click = "rbxasset://sounds/clickfast.wav",
+		Boost = "rbxasset://sounds/electronicpingshort.wav",
+		Letter = "rbxasset://sounds/electronicpingshort.wav",
+		Crash = "rbxasset://sounds/collide.wav",
+		Win = "rbxasset://sounds/victory.wav",
+		Lose = "rbxasset://sounds/bass.wav",
+	},
+	SfxVolume = 0.7,
+
+	-- Gamepad
+	GamepadDeadzone = 0.2,
+
 	-- First-person camera
 	CameraOffset = Vector3.new(0, 5.2, 4), -- from the Chassis: up, and behind the handle
 	CameraDownTilt = 0.22, -- higher looks further down at Grandma
@@ -79,5 +129,5 @@ return {
 	LineCooldown = 2,
 	MaxPusherDistance = 14, -- the pusher teleports back beyond this
 	FallResetDepth = 40, -- how far below the current room's entrance counts as falling off
-	RoomsPerRun = 3,
+	RoomsPerRun = 5, -- random rooms before the boss
 }

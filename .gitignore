@@ -1,3 +1,13 @@
+# Place files hold rooms and models; they live outside Git
+*.rbxl
+*.rbxlx
 *.rbxl.lock
 *.rbxlx.lock
 sourcemap.json
+
+# OS and editor clutter
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.claude/settings.local.json

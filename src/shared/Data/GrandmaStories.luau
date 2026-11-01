@@ -32,4 +32,22 @@ return {
 		"Rocks don't do that, your uncle said.",
 		"Then why did he never come back, Gerald?",
 	},
+	{
+		"I invented the sandwich, you know.",
+		"Nobody believes me.",
+		"I also invented lying.",
+		"Eat your crusts.",
+	},
+	{
+		"Your grandfather proposed on a rollercoaster.",
+		"I said no.",
+		"Then the ride went around again.",
+		"I'm a very patient woman. Normally.",
+	},
+	{
+		"I once beat a shark in an arm wrestle.",
+		"It was at a casino in Reno.",
+		"He was a very bad loser.",
+		"Lovely man otherwise. Dentist.",
+	},
 }

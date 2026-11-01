@@ -3,7 +3,9 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Boss = require(script.Parent.Boss)
 local Config = require(ReplicatedStorage.Shared.Config)
+local HazardRunner = require(script.Parent.HazardRunner)
 local RoomData = require(ReplicatedStorage.Shared.Data.Rooms) :: any
 
 local RoomGenerator = {}
@@ -12,12 +14,32 @@ export type PlacedRoom = {
 	name: string,
 	entrance: CFrame,
 	exit: CFrame,
+	isBoss: boolean,
+}
+
+export type Letter = {
+	letter: string,
+	part: Part?, -- nil once collected
 }
 
 export type Layout = {
 	model: Model,
 	rooms: { PlacedRoom },
 	boosts: { Part },
+	hazards: { HazardRunner.Hazard },
+	letters: { Letter },
+	gate: Part?,
+	boss: Boss.State?,
+}
+
+-- What a room adds to the layout as it's built.
+type RoomContents = {
+	random: Random,
+	boosts: { Part },
+	hazards: { HazardRunner.Hazard },
+	letters: { Letter },
+	gate: Part?,
+	boss: Boss.State?,
 }
 
 local WALL_COLOR = Color3.fromRGB(190, 130, 90)
@@ -34,6 +56,8 @@ local CRATE_COLOR = Color3.fromRGB(160, 110, 60)
 local GATE_COLOR = Color3.fromRGB(255, 210, 70)
 local FINISH_COLOR = Color3.fromRGB(90, 220, 120)
 local BOOST_COLOR = Color3.fromRGB(255, 240, 60)
+local LETTER_COLOR = Color3.fromRGB(255, 120, 200)
+local BOSS_GATE_COLOR = Color3.fromRGB(200, 40, 60)
 
 -- Where a player starts, and the chair's start. Heads toward the first room.
 RoomGenerator.ChairStart = CFrame.new(0, 3, 12)
@@ -60,7 +84,23 @@ local function addDecoration(parent: Instance, name: string, size: Vector3, cfra
 	return part
 end
 
-local function buildRoom(parent: Instance, name: string, data: any, origin: CFrame, roadColor: Color3, random: Random?, boosts: { Part }?)
+local function addFloatingText(part: Part, text: string, sizeInStuds: number)
+	local billboard = Instance.new("BillboardGui")
+	billboard.Size = UDim2.fromScale(sizeInStuds, sizeInStuds)
+	billboard.AlwaysOnTop = true
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextStrokeTransparency = 0
+	label.Font = Enum.Font.Cartoon
+	label.TextScaled = true
+	label.Text = text
+	label.Parent = billboard
+	billboard.Parent = part
+end
+
+local function buildRoom(parent: Instance, name: string, data: any, origin: CFrame, roadColor: Color3, contents: RoomContents?)
 	local room = Instance.new("Model")
 	room.Name = name
 
@@ -77,12 +117,24 @@ local function buildRoom(parent: Instance, name: string, data: any, origin: CFra
 			local crate = addPart(room, "Crate", Vector3.new(3, 3, 3), origin * CFrame.new(piece.at), CRATE_COLOR)
 			crate.Anchored = false
 			crate.CustomPhysicalProperties = PhysicalProperties.new(0.15, 0.4, 0.3)
-		elseif piece.kind == "boost" and random and boosts then
-			if random:NextNumber() < Config.BoostChance then
+		elseif contents and piece.kind == "boost" then
+			if contents.random:NextNumber() < Config.BoostChance then
 				local pickup = addDecoration(room, "Boost", Vector3.new(3, 3, 3), origin * CFrame.new(piece.at), BOOST_COLOR)
 				pickup.Shape = Enum.PartType.Ball
-				table.insert(boosts, pickup)
+				table.insert(contents.boosts, pickup)
 			end
+		elseif contents and piece.kind == "hazard" then
+			local hazard = HazardRunner.build(room, piece.hazard, origin * CFrame.new(piece.at), piece.options, contents.random)
+			table.insert(contents.hazards, hazard)
+		elseif contents and piece.kind == "letter" then
+			local pickup = addDecoration(room, "Letter", Vector3.new(5, 5, 5), origin * CFrame.new(piece.at), LETTER_COLOR)
+			pickup.Shape = Enum.PartType.Ball
+			addFloatingText(pickup, piece.letter, 6)
+			table.insert(contents.letters, { letter = piece.letter, part = pickup })
+		elseif contents and piece.kind == "gate" then
+			contents.gate = addPart(room, "BossGate", piece.size, origin * CFrame.new(piece.at), BOSS_GATE_COLOR)
+		elseif contents and piece.kind == "mildred" then
+			contents.boss = Boss.build(room, origin * CFrame.new(piece.at), contents.random)
 		end
 	end
 
@@ -149,28 +201,47 @@ function RoomGenerator.generate(seed: number, roomCount: number): Layout
 	local model = Instance.new("Model")
 	model.Name = "RunRooms"
 
-	local rooms: { PlacedRoom } = {}
-	local boosts: { Part } = {}
-	local cursor = RoomData.Start.exit
 	local count = math.min(roomCount, #names)
-	for index = 1, count do
+	-- The boss room always comes last.
+	names[count + 1] = RoomData.Boss.name
+
+	local rooms: { PlacedRoom } = {}
+	local contents: RoomContents = {
+		random = random,
+		boosts = {},
+		hazards = {},
+		letters = {},
+		gate = nil,
+		boss = nil,
+	}
+	local cursor = RoomData.Start.exit
+	for index = 1, count + 1 do
 		local name = names[index]
-		local data = RoomData.Pool[name]
+		local isBoss = index == count + 1
+		local data = if isBoss then RoomData.Boss else RoomData.Pool[name]
 		local exit = cursor * data.exit
 		local roadColor = ROOM_ROAD_COLORS[(index - 1) % #ROOM_ROAD_COLORS + 1]
-		buildRoom(model, name, data, cursor, roadColor, random, boosts)
-		if index == count then
+		buildRoom(model, name, data, cursor, roadColor, contents)
+		if isBoss then
 			addGate(model, exit, FINISH_COLOR, "BINGO HALL")
 		else
 			addGate(model, exit, GATE_COLOR, `ROOM {index + 1}: {RoomGenerator.displayName(names[index + 1])}`)
 		end
-		table.insert(rooms, { name = name, entrance = cursor, exit = exit })
+		table.insert(rooms, { name = name, entrance = cursor, exit = exit, isBoss = isBoss })
 		cursor = exit
 	end
 	buildRoom(model, "Finish", RoomData.Finish, cursor, FINISH_COLOR)
 
 	model.Parent = workspace
-	return { model = model, rooms = rooms, boosts = boosts }
+	return {
+		model = model,
+		rooms = rooms,
+		boosts = contents.boosts,
+		hazards = contents.hazards,
+		letters = contents.letters,
+		gate = contents.gate,
+		boss = contents.boss,
+	}
 end
 
 return RoomGenerator

@@ -1,18 +1,19 @@
 --!strict
 -- Drives the wheelchair and decides when a crash, tilt, or fast turn throws Grandma out.
--- W/S push and pull, A/D steer, Shift speeds up, Space brakes, R restarts the run.
+-- ChairInput handles the driving controls. R or the gamepad's Y restarts the run.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 
+local ChairInput = require(script.Parent.ChairInput)
 local Config = require(ReplicatedStorage.Shared.Config)
 local GrandmaReactions = require(script.Parent.GrandmaReactions)
 
 local TELEPORT_DISTANCE = 20 -- moving this far in one frame means a reset, not a crash
 local GROUND_RAY_LENGTH = 1.5
+local EJECT_TIMEOUT = 1 -- stop waiting if the server turned the eject down
 
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -27,49 +28,42 @@ local head = grandma:WaitForChild("Head") :: Part
 
 local maxTiltUpY = math.cos(math.rad(Config.MaxTiltDegrees))
 
-local braking = false
 local tipMeter = 0
 local previousSpeed = 0
 local previousPosition = chassis.Position
 local wasSeated = true
 local ejectPending = false -- sent to the server, but the attribute hasn't changed yet
+local ejectTime = 0
 local boostUntil = 0
 local lastBoostCount = 0
+
+-- How much upgrades have changed a stat during this run.
+local function stat(name: string): number
+	return (chassis:GetAttribute(`Stat{name}`) :: number?) or 1
+end
 
 chassis:GetAttributeChangedSignal("BoostCount"):Connect(function()
 	local count = (chassis:GetAttribute("BoostCount") :: number?) or 0
 	if count > lastBoostCount then
-		boostUntil = os.clock() + Config.BoostDuration
+		boostUntil = os.clock() + Config.BoostDuration * stat("BoostTime")
 		GrandmaReactions.say(head, "Boost", true)
 	end
 	lastBoostCount = count
 end)
 
-ContextActionService:BindAction("Brake", function(_, inputState)
-	braking = inputState == Enum.UserInputState.Begin
-	return Enum.ContextActionResult.Sink
-end, true, Enum.KeyCode.Space)
-ContextActionService:SetTitle("Brake", "Brake")
+chassis:GetAttributeChangedSignal("Surface"):Connect(function()
+	local surface = chassis:GetAttribute("Surface") :: string?
+	if surface then
+		GrandmaReactions.say(head, surface)
+	end
+end)
 
 ContextActionService:BindAction("RestartRun", function(_, inputState)
-	if inputState == Enum.UserInputState.Begin then
+	if inputState == Enum.UserInputState.Begin and chassis:GetAttribute("RunState") ~= "Menu" then
 		restartRun:FireServer()
 	end
 	return Enum.ContextActionResult.Sink
-end, true, Enum.KeyCode.R)
-ContextActionService:SetTitle("RestartRun", "Restart")
-
-local function keyAxis(positive: { Enum.KeyCode }, negative: { Enum.KeyCode }): number
-	local function anyDown(keys: { Enum.KeyCode }): boolean
-		for _, key in keys do
-			if UserInputService:IsKeyDown(key) then
-				return true
-			end
-		end
-		return false
-	end
-	return (if anyDown(positive) then 1 else 0) - (if anyDown(negative) then 1 else 0)
-end
+end, false, Enum.KeyCode.R, Enum.KeyCode.ButtonY)
 
 local function moveToward(value: number, target: number, amount: number): number
 	if value < target then
@@ -87,6 +81,7 @@ end
 
 local function launchGrandma(velocity: Vector3)
 	ejectPending = true
+	ejectTime = os.clock()
 	tipMeter = 0
 	GrandmaReactions.say(head, "Launched", true)
 	local launch = velocity * Config.LaunchSpeedMultiplier + Vector3.yAxis * Config.LaunchUpSpeed
@@ -101,23 +96,23 @@ RunService.Heartbeat:Connect(function(dt)
 	previousPosition = chassis.Position
 
 	local seated = chassis:GetAttribute("GrandmaSeated") == true
-	if ejectPending then
-		if not seated then
-			ejectPending = false
-			wasSeated = false
-		end
-	elseif seated and not wasSeated then
+	if ejectPending and seated and os.clock() - ejectTime > EJECT_TIMEOUT then
+		ejectPending = false
+	end
+	if not seated then
+		ejectPending = false
+		wasSeated = false
+	elseif not ejectPending and not wasSeated then
 		wasSeated = true
 		previousSpeed = horizontalSpeed
 		GrandmaReactions.say(head, "Reseated", true)
 	end
 	local running = chassis:GetAttribute("RunState") == "Running"
 	local canFall = running and seated and wasSeated and not ejectPending
+	ChairInput.setTouchVisible(running)
 
-	-- Ignore keys while typing in chat or another text box, and after the run ends.
-	local typing = UserInputService:GetFocusedTextBox() ~= nil or not running
-	local throttle = if typing then 0 else keyAxis({ Enum.KeyCode.W, Enum.KeyCode.Up }, { Enum.KeyCode.S, Enum.KeyCode.Down })
-	local steer = if typing then 0 else keyAxis({ Enum.KeyCode.D, Enum.KeyCode.Right }, { Enum.KeyCode.A, Enum.KeyCode.Left })
+	local throttle = if running then ChairInput.getThrottle() else 0
+	local steer = if running then ChairInput.getSteer() else 0
 
 	local yawRate = 0
 	local forwardSpeed = velocity:Dot(frame.LookVector)
@@ -125,23 +120,26 @@ RunService.Heartbeat:Connect(function(dt)
 	-- Only this client reads it, for the camera's speed effect.
 	chassis:SetAttribute("Boosted", boosted)
 
+	local surface = chassis:GetAttribute("Surface")
 	local ground = findGround()
 	if ground then
-		local sideSpeed = velocity:Dot(frame.RightVector) * math.exp(-Config.SidewaysGrip * dt)
+		local grip = Config.SidewaysGrip * stat("Grip") * (if surface == "Oil" then Config.OilGripFactor else 1)
+		local sideSpeed = velocity:Dot(frame.RightVector) * math.exp(-grip * dt)
 		local upSpeed = math.min(velocity:Dot(frame.UpVector), Config.MaxStickUpSpeed)
+		local speedStat = stat("Speed")
+		local boostTopSpeed = Config.BoostTopSpeed * speedStat * stat("BoostSpeed")
 
-		if braking or not running then
-			forwardSpeed = moveToward(forwardSpeed, 0, Config.BrakeDeceleration * dt)
+		if ChairInput.isBraking() or not running then
+			forwardSpeed = moveToward(forwardSpeed, 0, Config.BrakeDeceleration * stat("BrakePower") * dt)
 		elseif boosted then
 			-- A boost shoves the chair forward whether you're pushing or not.
-			if forwardSpeed < Config.BoostTopSpeed then
-				forwardSpeed = math.min(forwardSpeed + Config.BoostAcceleration * dt, Config.BoostTopSpeed)
+			if forwardSpeed < boostTopSpeed then
+				forwardSpeed = math.min(forwardSpeed + Config.BoostAcceleration * dt, boostTopSpeed)
 			end
 		elseif throttle > 0 then
-			local sprinting = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
-				or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
-			local topSpeed = if sprinting then Config.SprintTopSpeed else Config.TopSpeed
-			local acceleration = if sprinting then Config.SprintAcceleration else Config.Acceleration
+			local sprinting = ChairInput.isSprinting()
+			local topSpeed = (if sprinting then Config.SprintTopSpeed else Config.TopSpeed) * speedStat
+			local acceleration = (if sprinting then Config.SprintAcceleration else Config.Acceleration) * stat("Acceleration")
 			if forwardSpeed < topSpeed then
 				forwardSpeed = math.min(forwardSpeed + acceleration * throttle * dt, topSpeed)
 			end
@@ -152,23 +150,27 @@ RunService.Heartbeat:Connect(function(dt)
 		else
 			forwardSpeed = moveToward(forwardSpeed, 0, Config.RollingDrag * dt)
 		end
-		local maxSpeed = if boosted then Config.BoostTopSpeed else Config.MaxRollSpeed
+		local maxSpeed = if boosted then boostTopSpeed else Config.MaxRollSpeed * speedStat
 		forwardSpeed = math.clamp(forwardSpeed, -maxSpeed, maxSpeed)
+		if surface == "Mud" and forwardSpeed > Config.MudTopSpeed then
+			forwardSpeed = moveToward(forwardSpeed, Config.MudTopSpeed, Config.MudDrag * dt)
+		end
 
 		chassis.AssemblyLinearVelocity = frame.LookVector * forwardSpeed
 			+ frame.RightVector * sideSpeed
 			+ frame.UpVector * upSpeed
 
 		local turnFactor = math.clamp(math.abs(forwardSpeed) / Config.TurnFullSpeed, Config.MinTurnFactor, 1)
-		yawRate = -steer * Config.TurnRate * turnFactor
+		yawRate = -steer * Config.TurnRate * stat("TurnRate") * turnFactor
 		-- Steering sets the turn, and the chair follows the slope instead of wobbling freely.
 		local angular = frame.UpVector * yawRate
 			+ frame.UpVector:Cross(ground.Normal) * Config.GroundAlignStrength
 
 		-- A fast turn leans the chair over and fills the tip meter.
 		local turnForce = math.abs(forwardSpeed * yawRate)
-		if canFall and turnForce > Config.SafeTurnForce then
-			local overflow = turnForce - Config.SafeTurnForce
+		local safeTurnForce = Config.SafeTurnForce * stat("TurnSafety")
+		if canFall and turnForce > safeTurnForce then
+			local overflow = turnForce - safeTurnForce
 			local before = tipMeter
 			tipMeter += overflow / Config.TipBuildup * dt
 			local leanDirection = if yawRate * forwardSpeed > 0 then 1 else -1
@@ -191,10 +193,10 @@ RunService.Heartbeat:Connect(function(dt)
 			speedDrop = 0
 		end
 
-		if speedDrop >= Config.CrashSpeedDrop or tipMeter >= 1 or frame.UpVector.Y < maxTiltUpY then
+		if speedDrop >= Config.CrashSpeedDrop * stat("Toughness") or tipMeter >= 1 or frame.UpVector.Y < maxTiltUpY then
 			local launchFrom = frame.LookVector * math.max(previousSpeed, horizontalSpeed)
 			launchGrandma(launchFrom)
-		elseif speedDrop >= Config.BumpSpeedDrop then
+		elseif speedDrop >= Config.BumpSpeedDrop * stat("Toughness") then
 			GrandmaReactions.say(head, "Bumped")
 			grandmaBumped:FireServer()
 		end
